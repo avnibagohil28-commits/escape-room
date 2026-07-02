@@ -1,13 +1,21 @@
 import os
-import sqlite3
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
+from supabase import create_client, Client
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_suspense_key'
+app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_suspense_key')
 
-# Change this line in app.py to use Render's persistent disk path
-DATABASE = os.environ.get('DISK_PATH', '') + '/data/database.db' if os.environ.get('RENDER') else 'database.db'
+# --- 🔌 SUPABASE DATABASE CONNECTION ---
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY environment variables.")
+
+# Initialize the Supabase Client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 # --- 🚀 AUTOMATED 50-LEVEL PUZZLE ENGINE ---
 def generate_puzzle(level):
@@ -36,7 +44,6 @@ def generate_puzzle(level):
     elif level % 3 == 2:
         words_pool = ["lock", "key", "door", "gate", "room", "pass", "code", "find", "open", "seek"]
         target_word = words_pool[level % len(words_pool)]
-        # Simple shift cipher text
         scrambled = "".join(chr(ord(c) + 1) for c in target_word)
         
         return {
@@ -65,24 +72,15 @@ def generate_puzzle(level):
             "answer": riddle_ans
         }
 
-def get_db_connection():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
 
-@app.before_request
-def init_db():
-    if not os.path.exists(DATABASE):
-        conn = get_db_connection()
-        with open('schema.sql', 'r') as f:
-            conn.executescript(f.read())
-        conn.close()
+# --- 🛣️ ROUTES & CONTROLLERS ---
 
 @app.route('/')
 def home():
     if 'user_id' in session:
         return redirect(url_for('game'))
     return redirect(url_for('login'))
+
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -92,18 +90,24 @@ def signup():
         password = request.form['password']
         hashed_password = generate_password_hash(password)
         
-        conn = get_db_connection()
         try:
-            conn.execute('INSERT INTO users (username, email, password) VALUES (?, ?, ?)', (username, email, hashed_password))
-            conn.commit()
+            # Insert into Supabase 'users' table
+            data, count = supabase.table("users").insert({
+                "username": username,
+                "email": email,
+                "password": hashed_password,
+                "current_level": 1  # Default level for new players
+            }).execute()
+            
             flash('Account created successfully! Please log in.', 'success')
             return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
+            
+        except Exception as e:
+            # Typically triggers on unique constraint violations (username/email already exists)
             flash('Username or Email already exists!', 'danger')
-        finally:
-            conn.close()
             
     return render_template('signup.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -111,49 +115,57 @@ def login():
         identifier = request.form['identifier'].strip()
         password = request.form['password']
         
-        conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE username = ? OR email = ?', (identifier, identifier)).fetchone()
-        conn.close()
-        
-        if user and check_password_hash(user['password'], password):
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            return redirect(url_for('game'))
-        else:
-            flash('Invalid credentials.', 'danger')
+        # Query matching username OR email
+        response_user = supabase.table("users").select("*").eq("username", identifier).execute()
+        if not response_user.data:
+            response_user = supabase.table("users").select("*").eq("email", identifier).execute()
+            
+        if response_user.data:
+            user = response_user.data[0]
+            if check_password_hash(user['password'], password):
+                session['user_id'] = user['id']
+                session['username'] = user['username']
+                return redirect(url_for('game'))
+                
+        flash('Invalid credentials.', 'danger')
             
     return render_template('login.html')
+
 
 @app.route('/game', methods=['GET', 'POST'])
 def game():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    conn = get_db_connection()
-    user = conn.execute('SELECT current_level FROM users WHERE id = ?', (session['user_id'],)).fetchone()
-    current_level = user['current_level']
-    
-    # Generate the room logic programmatically
+    # Fetch current user level from Supabase
+    response = supabase.table("users").select("current_level").eq("id", session['user_id']).execute()
+    if not response.data:
+        session.clear()
+        return redirect(url_for('login'))
+        
+    current_level = response.data[0]['current_level']
     puzzle = generate_puzzle(current_level)
     
     if request.method == 'POST':
         user_answer = request.form.get('answer', '').strip().lower()
         if puzzle and puzzle['answer'] and user_answer == puzzle['answer'].lower():
             current_level += 1
-            conn.execute('UPDATE users SET current_level = ? WHERE id = ?', (current_level, session['user_id']))
-            conn.commit()
-            conn.close()
+            
+            # Update user level in Supabase
+            supabase.table("users").update({"current_level": current_level}).eq("id", session['user_id']).execute()
             return redirect(url_for('game'))
         else:
             flash('Incorrect code. The mechanism fails to move...', 'danger')
             
-    conn.close()
     return render_template('game.html', puzzle=puzzle, level=current_level)
+
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
+
+# --- 🏃‍♂️ EXECUTION ---
 if __name__ == '__main__':
     app.run(debug=True)
