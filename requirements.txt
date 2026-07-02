@@ -1,3 +1,4 @@
 Flask==3.0.3
 supabase==2.13.0
 Werkzeug==3.0.3
+gunicorn
