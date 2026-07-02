@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escape Room - Level {{ level }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1">
+</head>
+<body>
+
+    <div class="game-container">
+        <header style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 10px;">
+            <span>Player: <strong>{{ session['username'] }}</strong></span>
+            <a href="{{ url_for('logout') }}" style="color: #ff4444; text-decoration: none; font-weight: bold; border: 1px solid #ff4444; padding: 3px 8px; border-radius: 4px;">Log Out</a>
+        </header>
+
+        <hr style="border-color: #1f2833; margin-bottom: 20px;">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash {{ category }}" style="margin-bottom: 15px;">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% if puzzle and puzzle.answer %}
+            <h2>Room {{ level }}</h2>
+            <p class="story">{{ puzzle.story }}</p>
+            <p class="clue"><em>Clue: {{ puzzle.clue }}</em></p>
+
+            <form method="POST">
+                <input type="text" name="answer" placeholder="Enter password/code..." required autocomplete="off">
+                <button type="submit" style="width: 85%; margin-top: 10px;">Attempt Escape</button>
+            </form>
+        {% else %}
+            <h2>Freedom!</h2>
+            <p class="story" style="color: #66fcf1;">{{ puzzle.clue }}</p>
+            <p class="story">You managed to survive the labyrinth and break free.</p>
+            <a href="{{ url_for('logout') }}"><button style="width: 85%; margin-top: 15px;">Play Again</button></a>
+        {% endif %}
+    </div>
+
+
+</body>
+</html>

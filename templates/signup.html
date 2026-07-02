@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Escape Room - Create Account</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1">
+</head>
+<body>
+    <div class="game-container">
+        <h2>Create Soul Record</h2>
+        <p class="story">Fill in all fields to register your player file.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash {{ category }}" style="margin-bottom: 15px;">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('signup') }}" method="POST" autocomplete="off">
+            <input type="text" name="username" placeholder="Choose a Username" required autocomplete="none">
+            <input type="email" name="email" placeholder="Your Email Address" required style="width: 80%; padding: 10px; margin: 15px 0; background-color: #0b0c10; border: 1px solid #45f3ff; color: white; text-align: center;">
+            <input type="password" name="password" placeholder="Create a Password" required autocomplete="new-password">
+            
+            <button type="submit" style="margin-top: 15px; width: 85%;">Initiate Registration</button>
+        </form>
+
+        <hr style="border-color: #1f2833; margin: 20px 0;">
+        <p style="font-size: 0.9em;">
+            Already registered? <a href="{{ url_for('login') }}" style="color: #66fcf1; text-decoration: none; font-weight: bold;">Log In Here</a>
+        </p>
+    </div>
+</body>
+</html>
